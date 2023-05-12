@@ -90,8 +90,7 @@ impl Interpreter {
     pub fn tick(&mut self) {
         //Fetch
         let op_code = self.fetch();
-        //Decode
-        //Execute
+        self.execute(op_code);
     }
     fn fetch(&mut self) -> u16 {
         //CHIP_8 is big endian
@@ -100,6 +99,174 @@ impl Interpreter {
         let op_code = (high_byte << 8) | low_byte;
         self.pc += 2;
         op_code
+    }
+
+    fn execute(&mut self, op: u16) {
+        let nibble1 = (op & 0xF000) >> 12;
+        let nibble2 = (op & 0x0F00) >> 8;
+        let nibble3 = (op & 0x00F0) >> 4;
+        let nibble4 = op & 0x000F;
+
+        match (nibble1, nibble2, nibble3, nibble4) {
+            //no op
+            (0, 0, 0, 0) => return,
+            //clear screen
+            (0, 0, 0xE, 0) => {
+                self.display = [false; SCREEN_WIDTH * SCREEN_HEIGHT];
+            }
+            //00EE return from subroutine, sets program counter to return address popped from stack
+            (0, 0, 0xE, 0xE) => {
+                let return_address = self.pop();
+                self.pc = return_address;
+            }
+            //1NNN jump to address
+            (1, _, _, _) => {
+                let addr = op & 0xFFF;
+                self.pc = addr;
+            }
+            //2NNN call subroutne
+            (2, _, _, _) => {
+                let addr = op & 0xFFF;
+                self.push(self.pc); //pushes current addr in the program counter ontop of the stack
+                self.pc = addr // jumps to subroutne
+            }
+            //3XNN skip next if VF == NN
+            (3, _, _, _) => {
+                let x = nibble2 as usize;
+                let nn = (op & 0xFF) as u8;
+                if self.v_registars[x] == nn {
+                    self.pc += 2;
+                }
+            }
+            //4XNN skip next if VF != NN
+            (4, _, _, _) => {
+                let x = nibble2 as usize;
+                let nn = (op & 0xFF) as u8;
+                if self.v_registars[x] != nn {
+                    self.pc += 2;
+                }
+            }
+            //5XY0 skip next instruction if Vx == Vy
+            (5, _, _, 0) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+                if self.v_registars[x] == self.v_registars[y] {
+                    self.pc += 2;
+                }
+            }
+            //6XNN, set Vx to NN
+            (6, _, _, _) => {
+                let x = nibble2 as usize;
+                let nn = (op & 0xFF) as u8;
+                self.v_registars[x] = nn;
+            }
+            //Set Vx to Vx + NN
+            (7, _, _, _) => {
+                let x = nibble2 as usize;
+                let nn = (op & 0xFF) as u8;
+                self.v_registars[x] = self.v_registars[x].wrapping_add(nn)
+            }
+            //8XY0, set Vx to Vy
+            (8, _, _, 0) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+                self.v_registars[x] = self.v_registars[y];
+            }
+            //8XY1, Vx |= Vy
+            (8, _, _, 1) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+                self.v_registars[x] |= self.v_registars[y];
+            }
+            //8XY2, Vx &= Vy
+            (8, _, _, 2) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+                self.v_registars[x] &= self.v_registars[y];
+            }
+            //8XY3, Vx ^= Vy
+            (8, _, _, 3) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+                self.v_registars[x] ^= self.v_registars[y];
+            }
+            //8XY4, Vx += Vy, overflow can occur in this function
+            (8, _, _, 4) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+
+                let (new_vx, carry) = self.v_registars[x].overflowing_add(self.v_registars[y]);
+
+                let new_vf = if carry { 1 } else { 0 };
+
+                self.v_registars[x] = new_vx;
+                self.v_registars[0xF] = new_vf;
+            }
+            //8XY5, Vx - Vy, underflow can occur here
+            (8, _, _, 5) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+
+                let (new_vx, borrow) = self.v_registars[x].overflowing_sub(self.v_registars[y]);
+
+                let new_vf = if borrow { 0 } else { 1 };
+
+                self.v_registars[x] = new_vx;
+                self.v_registars[0xF] = new_vf;
+            }
+            //8XY6, Vx >>= 1,
+            (8, _, _, 6) => {
+                let x = nibble2 as usize;
+
+                let lsb = self.v_registars[x] & 1;
+
+                self.v_registars[x] >>= 1;
+                self.v_registars[0xF] = lsb;
+            }
+            //8XY7, Vy - Vx, underflow can also occur here
+            (8, _, _, 7) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+
+                let (new_vx, borrow) = self.v_registars[y].overflowing_sub(self.v_registars[x]);
+
+                let new_vf = if borrow { 0 } else { 1 };
+                self.v_registars[x] = new_vx;
+                self.v_registars[0xF] = new_vf;
+            }
+            //8XYE, Vx <<= 1
+            (8, _, _, 0xE) => {
+                let x = nibble2 as usize;
+                let msb = (self.v_registars[x] >> 7) & 1;
+                self.v_registars[x] <<= 1;
+                self.v_registars[0xF] = msb;
+            }
+            //9XY0, skip next instruction if Vx != Vy
+            (9, _, _, 0) => {
+                let x = nibble2 as usize;
+                let y = nibble3 as usize;
+
+                if self.v_registars[x] != self.v_registars[y] {
+                    self.pc += 2;
+                }
+            }
+
+            //unimplemented opcode
+            (_, _, _, _) => unimplemented!("Unimplemented opcode: {}", op),
+        }
+    }
+
+    pub fn tick_timers(&mut self) {
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        if self.sound_timer > 0 {
+            if self.sound_timer == 1 {
+                //Beep
+            }
+            self.sound_timer -= 1;
+        }
     }
 }
 
