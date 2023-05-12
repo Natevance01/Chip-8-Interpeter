@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 
-chip-8-backend = { path = "../chip8-backend"}
+chip8-backend = { path = "../chip8-backend"}
