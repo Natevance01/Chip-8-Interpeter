@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"chip8_backend":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.69.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"chip8_backend/struct.Processor.html\" title=\"struct chip8_backend::Processor\">Processor</a>",1,["chip8_backend::Processor"]]]
+"chip8_backend":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.69.0/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> for <a class=\"struct\" href=\"chip8_backend/struct.Interpreter.html\" title=\"struct chip8_backend::Interpreter\">Interpreter</a>",1,["chip8_backend::Interpreter"]]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

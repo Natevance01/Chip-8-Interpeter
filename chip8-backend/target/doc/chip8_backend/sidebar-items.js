@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Processor"]};
+window.SIDEBAR_ITEMS = {"struct":["Interpreter"]};
