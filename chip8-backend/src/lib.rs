@@ -370,6 +370,46 @@ impl Interpreter {
             //FX1E, Index registar += Vx
             (0xF, _, 1, 0xE) => {
                 let x = nibble2 as usize;
+                let vx = self.v_registars[x] as u16;
+                self.index_registar = self.index_registar.wrapping_add(vx);
+            }
+            //FX29, set index registar to the beginnor of the font set located at the beginning of
+            //RAM
+            (0xF, _, 2, 9) => {
+                let x = nibble2 as usize;
+                let c = self.v_registars[x] as u16;
+                self.index_registar = c * 5;
+            }
+            //BCD
+            (0xF, _, 3, 3) => {
+                let x = nibble2 as usize;
+                let vx = self.v_registars[x] as f32;
+                //fetch 100's digit
+                let hundreds = (vx / 100.0).floor() as u8;
+                //fetch 10's digit
+                let tens = ((vx / 10.0) % 10.0).floor() as u8;
+                //fetch one's digit
+                let ones = (vx % 10.0) as u8;
+
+                self.ram[self.index_registar as usize] = hundreds;
+                self.ram[(self.index_registar + 1) as usize] = tens;
+                self.ram[(self.index_registar + 2) as usize] = ones;
+            }
+            //FX55, store v0 - vx into index registar
+            (0xF, _, 5, 5) => {
+                let x = nibble2 as usize;
+                let i = self.index_registar as usize;
+                for idx in 0..=x {
+                    self.ram[i + idx] = self.v_registars[idx];
+                }
+            }
+            //FX65, load I into V0 - VX
+            (0xF, _, 6, 5) => {
+                let x = nibble2 as usize;
+                let i = self.index_registar as usize;
+                for idx in 0..=x {
+                    self.v_registars[idx] = self.ram[idx + i];
+                }
             }
 
             //unimplemented opcode
