@@ -1,3 +1,5 @@
+use rand::random;
+
 const RAM_SIZE: usize = 4096;
 const SCREEN_WIDTH: usize = 32;
 const SCREEN_HEIGHT: usize = 64;
@@ -33,6 +35,7 @@ pub struct Interpreter {
     ///ram
     display: [bool; SCREEN_WIDTH * SCREEN_HEIGHT],
     v_registars: [u8; NUM_REGISTARS],
+    //points to location in RAM
     index_registar: u16,
     stack_pointer: u16,
     /// points to top of stack
@@ -249,6 +252,124 @@ impl Interpreter {
                 if self.v_registars[x] != self.v_registars[y] {
                     self.pc += 2;
                 }
+            }
+
+            //ANNN, sets index registar to NNN
+            (0xA, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.index_registar = nnn;
+            }
+
+            //BNNN, jumps to V0 + NNN
+            (0xB, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.pc = (self.v_registars[0] as u16) + nnn;
+            }
+            //CXNN, Chip8 random number generator
+            //Vx = rng & nn
+            (0xC, _, _, _) => {
+                let x = nibble2 as usize;
+                let nn = (op & 0xFF) as u8;
+                let rng: u8 = random();
+                self.v_registars[x] = rng & nn;
+            }
+            //draw sprite to screen
+            //DXYN
+            (0xD, _, _, _) => {
+                // get (x, y) coordinates
+                let x_coord = self.v_registars[nibble2 as usize] as u16;
+                let y_coord = self.v_registars[nibble3 as usize] as u16;
+
+                //N gives us the height of the sprite
+                let num_rows = nibble4;
+
+                //flag for tracking if pixels are flipped
+                let mut flipped = false;
+
+                //loop through each row in bitmap
+                for row in 0..num_rows {
+                    //get address of row data
+                    let address = self.index_registar + row as u16;
+                    let pixels = self.ram[address as usize];
+                    //loop through each column in bitmap
+                    for col in 0..8 {
+                        //mask to fetch current pixel's bit, only flip if bit is 1
+                        if (pixels & (0b1000_0000 >> col)) != 0 {
+                            let x = (x_coord + col) as usize % SCREEN_WIDTH;
+                            let y = (y_coord + row) as usize % SCREEN_HEIGHT;
+
+                            let idx = x + SCREEN_WIDTH * y;
+
+                            flipped |= self.display[idx];
+                            self.display[idx] ^= true;
+                        }
+                    }
+                }
+
+                //populate 0xF registar
+
+                if flipped {
+                    self.v_registars[0xF] = 1;
+                } else {
+                    self.v_registars[0xF] = 0;
+                }
+            }
+            //EX9E, skip next instruction if keypress
+            (0xE, _, 9, 0xE) => {
+                let x = nibble2 as usize;
+                let vx = self.v_registars[x];
+                let key = self.keys[vx as usize];
+                if key {
+                    self.pc += 2;
+                }
+            }
+            //EXA1, skip next instruciton if key is not pressed
+            (0xE, _, 0xA, 1) => {
+                let x = nibble2 as usize;
+                let vx = self.v_registars[x];
+                let key = self.keys[vx as usize];
+                if !key {
+                    self.pc += 2;
+                }
+            }
+            //FX07 Vx = Delay timer
+            (0xF, _, 0, 7) => {
+                let x = nibble2 as usize;
+                self.v_registars[x] = self.delay_timer;
+            }
+
+            //FX0A, wait for keypress
+            (0xF, _, 0, 0xA) => {
+                let x = nibble2 as usize;
+                let mut pressed = false;
+
+                for i in 0..self.keys.len() {
+                    if self.keys[i] {
+                        self.v_registars[x] = i as u8;
+                        pressed = true;
+                        break;
+                    }
+                }
+                if !pressed {
+                    //redo opcode
+                    self.pc -= 2;
+                }
+            }
+
+            //FX15, delay timer = Vx
+            (0xF, _, 1, 5) => {
+                let x = nibble2 as usize;
+                self.delay_timer = self.v_registars[x];
+            }
+
+            //FX18, sound timer = vx
+            (0xF, _, 1, 8) => {
+                let x = nibble2 as usize;
+                self.sound_timer = self.v_registars[x];
+            }
+            //FX1E, Index registar += Vx
+            (0xF, _, 1, 0xE) => {
+                let x = nibble2 as usize;
             }
 
             //unimplemented opcode
